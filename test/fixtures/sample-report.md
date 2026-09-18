@@ -4,11 +4,17 @@
 **Rule:** `security_concern`
 **Model:** jev-latest
 
+## Task
+
+_Captured from `--task`._
+
+Authenticate users without storing or querying plaintext passwords.
+
 Jev produced typed decisions only. Diagnose causes in the diff before changing code.
 
 ## Why
 
-- has_security_concern=0.84 (>= 0.7)
+- has_security_concern=0.84 (&gt;= 0.7)
 
 ## Scores
 
@@ -38,7 +44,6 @@ Jev produced typed decisions only. Diagnose causes in the diff before changing c
 ## Context
 
 - **Source:** file:test/fixtures/synthetic.diff
-- **Task:** Authenticate users without storing or querying plaintext passwords.
 - **Files:** `src/login.ts`
 - **Usage:** 1840 input tokens, 0 output tokens
 

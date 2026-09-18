@@ -8,6 +8,7 @@ import {
   type PolicyResult,
   type ReviewAnswers,
 } from './policy.js';
+import type { TaskOrigin } from './git.js';
 
 export interface ReviewUsage {
   inputTokens: number;
@@ -21,6 +22,7 @@ export interface ReviewReport {
   model: string;
   usage: ReviewUsage;
   task: string;
+  taskOrigin: TaskOrigin;
   commitMessages?: string;
   source: string;
   files: string[];
@@ -42,6 +44,17 @@ export interface ReviewReport {
     primary_risk: ChoiceView;
     review_focus: ChoiceView;
   };
+  slices?: SliceReport[];
+}
+
+export interface SliceReport {
+  files: string[];
+  decision: Decision;
+  rule: string;
+  reasons: string[];
+  scores: ReviewReport['scores'];
+  nouls: ReviewReport['nouls'];
+  choices: ReviewReport['choices'];
 }
 
 type ScoreView =
@@ -75,15 +88,18 @@ export function buildReport(options: {
   model: string;
   usage: ReviewUsage;
   task: string;
+  taskOrigin?: TaskOrigin;
   commitMessages?: string;
   source: string;
   files: string[];
   omitted?: string[];
   truncated: boolean;
   policy?: PolicyResult;
+  slices?: Array<{ files: string[]; answers: ReviewAnswers; policy: PolicyResult }>;
 }): ReviewReport {
   const policy = options.policy ?? decide(options.answers);
   const { answers } = options;
+  const scorecard = scorecardFromAnswers(answers);
 
   return {
     decision: policy.decision,
@@ -92,11 +108,73 @@ export function buildReport(options: {
     model: options.model,
     usage: options.usage,
     task: options.task,
+    taskOrigin: options.taskOrigin ?? 'fallback',
     commitMessages: options.commitMessages,
     source: options.source,
     files: options.files,
     omitted: options.omitted ?? [],
     truncated: options.truncated,
+    ...scorecard,
+    slices:
+      options.slices && options.slices.length > 1
+        ? options.slices.map((slice) => ({
+            files: slice.files,
+            decision: slice.policy.decision,
+            rule: slice.policy.rule,
+            reasons: slice.policy.reasons,
+            ...scorecardFromAnswers(slice.answers),
+          }))
+        : undefined,
+  };
+}
+
+export function renderMarkdown(report: ReviewReport): string {
+  const files =
+    report.files.length === 0
+      ? '_none_'
+      : report.files.map((file) => `\`${file}\``).join(', ');
+  const omitted =
+    report.omitted.length === 0
+      ? ''
+      : `\n- **Omitted:** ${report.omitted.map((file) => `\`${file}\``).join(', ')}`;
+  const truncated = report.truncated ? '\n\nDiff was truncated to fit Jev\'s token budget.\n' : '\n';
+  const sliceCount =
+    report.slices && report.slices.length > 1
+      ? `\n- **Slices:** ${report.slices.length} Jev calls (source files kept with their tests)`
+      : '';
+
+  return `# Jev review
+
+**Decision:** \`${report.decision}\`
+**Rule:** \`${report.rule}\`
+**Model:** ${report.model}
+
+## Task
+
+${taskOriginLine(report.taskOrigin)}
+
+${escapeForMarkdown(report.task)}
+${report.commitMessages ? `\nGit commit message(s) also sent:\n\n${escapeForMarkdown(report.commitMessages)}\n` : ''}
+Jev produced typed decisions only. Diagnose causes in the diff before changing code.
+
+## Why
+
+${report.reasons.map((reason) => `- ${escapeForMarkdown(reason)}`).join('\n')}
+${renderScorecards(report)}
+## Context
+
+- **Source:** ${report.source}
+- **Files:** ${files}${omitted}${sliceCount}
+- **Usage:** ${report.usage.inputTokens} input tokens, ${report.usage.outputTokens} output tokens
+${truncated}`;
+}
+
+export function renderJson(report: ReviewReport): string {
+  return `${JSON.stringify(report, null, 2)}\n`;
+}
+
+function scorecardFromAnswers(answers: ReviewAnswers): Pick<ReviewReport, 'scores' | 'nouls' | 'choices'> {
+  return {
     scores: {
       correctness: scoreView(answers.correctness, SCORE_LEVELS.correctness, 'better correctness'),
       test_gap: scoreView(answers.test_gap, SCORE_LEVELS.test_gap, 'better test coverage'),
@@ -120,65 +198,49 @@ export function buildReport(options: {
   };
 }
 
-export function renderMarkdown(report: ReviewReport): string {
-  const files =
-    report.files.length === 0
-      ? '_none_'
-      : report.files.map((file) => `\`${file}\``).join(', ');
-  const omitted =
-    report.omitted.length === 0
-      ? ''
-      : `\n- **Omitted:** ${report.omitted.map((file) => `\`${file}\``).join(', ')}`;
-  const truncated = report.truncated ? '\n\nDiff was truncated to fit Jev\'s token budget.\n' : '\n';
+function renderScorecards(report: ReviewReport): string {
+  if (report.slices && report.slices.length > 1) {
+    const sections = report.slices.map((slice, index) => {
+      const names =
+        slice.files.length === 0 ? '_unlisted_' : slice.files.map((file) => `\`${file}\``).join(', ');
+      return `### Slice ${index + 1}: ${names} — \`${slice.decision}\`
 
-  return `# Jev review
+${slice.reasons.map((reason) => `- ${escapeForMarkdown(reason)}`).join('\n')}
 
-**Decision:** \`${report.decision}\`
-**Rule:** \`${report.rule}\`
-**Model:** ${report.model}
+${scorecardTables(slice)}`;
+    });
+    return `\n## Slices\n\n${sections.join('\n')}\n`;
+  }
 
-Jev produced typed decisions only. Diagnose causes in the diff before changing code.
+  return `\n## Scores
 
-## Why
+${scorecardTables(report)}
+`;
+}
 
-${report.reasons.map((reason) => `- ${reason}`).join('\n')}
-
-## Scores
-
-| Dimension | Score (0–4) | Confidence | Higher means | Nearest level |
+function scorecardTables(view: Pick<ReviewReport, 'scores' | 'nouls' | 'choices'>): string {
+  return `| Dimension | Score (0–4) | Confidence | Higher means | Nearest level |
 | --- | ---: | ---: | --- | --- |
-${scoreRow('correctness', report.scores.correctness)}
-${scoreRow('test_gap', report.scores.test_gap)}
-${scoreRow('security', report.scores.security)}
-${scoreRow('blast_radius', report.scores.blast_radius)}
+${scoreRow('correctness', view.scores.correctness)}
+${scoreRow('test_gap', view.scores.test_gap)}
+${scoreRow('security', view.scores.security)}
+${scoreRow('blast_radius', view.scores.blast_radius)}
 
 ## Gates
 
 | Question | P(yes) | Certainty |
 | --- | ---: | ---: |
-${noulRow('safe_to_merge', report.nouls.safe_to_merge)}
-${noulRow('needs_human_review', report.nouls.needs_human_review)}
-${noulRow('has_security_concern', report.nouls.has_security_concern)}
+${noulRow('safe_to_merge', view.nouls.safe_to_merge)}
+${noulRow('needs_human_review', view.nouls.needs_human_review)}
+${noulRow('has_security_concern', view.nouls.has_security_concern)}
 
 ## Classification
 
 | Question | Choice | Confidence |
 | --- | --- | ---: |
-| change_kind | ${report.choices.change_kind.choice} | ${pct(report.choices.change_kind.confidence)} |
-| primary_risk | ${report.choices.primary_risk.choice} | ${pct(report.choices.primary_risk.confidence)} |
-| review_focus | ${report.choices.review_focus.choice} | ${pct(report.choices.review_focus.confidence)} |
-
-## Context
-
-- **Source:** ${report.source}
-- **Task:** ${indentMultiline(report.task)}
-${report.commitMessages ? `- **Commit messages:** ${indentMultiline(report.commitMessages)}\n` : ''}- **Files:** ${files}${omitted}
-- **Usage:** ${report.usage.inputTokens} input tokens, ${report.usage.outputTokens} output tokens
-${truncated}`;
-}
-
-export function renderJson(report: ReviewReport): string {
-  return `${JSON.stringify(report, null, 2)}\n`;
+| change_kind | ${view.choices.change_kind.choice} | ${pct(view.choices.change_kind.confidence)} |
+| primary_risk | ${view.choices.primary_risk.choice} | ${pct(view.choices.primary_risk.confidence)} |
+| review_focus | ${view.choices.review_focus.choice} | ${pct(view.choices.review_focus.confidence)} |`;
 }
 
 function scoreView(
@@ -250,6 +312,18 @@ function escapeCell(value: string): string {
   return value.replaceAll('|', '\\|');
 }
 
-function indentMultiline(value: string): string {
-  return value.replaceAll('\n', '\n  ');
+function taskOriginLine(origin: TaskOrigin): string {
+  switch (origin) {
+    case 'git':
+      return '_Captured from git commit messages._';
+    case 'cli':
+      return '_Captured from `--task`._';
+    case 'fallback':
+      return '_Generic fallback (no `--task` and no git commit messages)._';
+  }
+}
+
+/** Raw `<` / `>` make Cursor/VS Code preview treat the rest of the file as HTML. */
+function escapeForMarkdown(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }

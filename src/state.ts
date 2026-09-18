@@ -1,7 +1,9 @@
-import { splitDiffHunks } from './git.js';
+import { splitDiffHunks, type TaskOrigin } from './git.js';
+import { MAX_DIFF_CHARS as PACKED_MAX_DIFF_CHARS } from './pack.js';
 
 export interface ReviewState {
   task: string;
+  taskOrigin: TaskOrigin;
   commitMessages?: string;
   source: string;
   files: string[];
@@ -11,14 +13,15 @@ export interface ReviewState {
 }
 
 /**
- * TypeSafe's shared budget is about 32k tokens. Code is denser than English,
- * and the question pack shares that budget, so keep the diff well under 100k chars.
+ * TypeSafe's shared budget is about 32k tokens. Pack by estimated tokens and
+ * prefer source files plus their tests; only then split into extra Jev calls.
  */
-export const MAX_DIFF_CHARS = 45_000;
+export const MAX_DIFF_CHARS = PACKED_MAX_DIFF_CHARS;
 export const MAX_TASK_CHARS = 2_000;
 
 export function buildReviewState(options: {
   task?: string;
+  taskOrigin?: TaskOrigin;
   commitMessages?: string;
   source: string;
   files: string[];
@@ -38,6 +41,7 @@ export function buildReviewState(options: {
 
   return {
     task,
+    taskOrigin: options.taskOrigin ?? (options.task?.trim() ? 'cli' : 'fallback'),
     commitMessages,
     source: options.source,
     files: packed.files,

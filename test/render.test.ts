@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { decide } from '../src/policy.js';
+import { combineSlicePolicies, decide } from '../src/policy.js';
 import { buildReport, renderJson, renderMarkdown } from '../src/render.js';
 import { approveAnswers, docsAnswers, securityAnswers } from './fixtures/answers.js';
 
@@ -8,6 +8,7 @@ const meta = {
   model: 'jev-1.13.0',
   usage: { inputTokens: 1840, outputTokens: 0 },
   task: 'Authenticate users without storing plaintext passwords.',
+  taskOrigin: 'cli' as const,
   source: 'file:test/fixtures/synthetic.diff',
   files: ['src/login.ts'],
   truncated: false,
@@ -24,6 +25,10 @@ describe('renderMarkdown', () => {
 
     expect(markdown).toContain('**Decision:** `request_changes`');
     expect(markdown).toContain('**Rule:** `security_concern`');
+    expect(markdown).toContain('## Task');
+    expect(markdown).toContain('_Captured from `--task`._');
+    expect(markdown).toContain('Authenticate users without storing plaintext passwords.');
+    expect(markdown).toContain('## Context');
     expect(markdown).toContain('| has_security_concern |');
     expect(markdown).toContain('src/login.ts');
   });
@@ -49,7 +54,24 @@ describe('renderMarkdown', () => {
       ...meta,
     });
 
-    expect(renderMarkdown(report)).toContain('- **Commit messages:** abc1234 Add applicability');
+    expect(renderMarkdown(report)).toContain('Git commit message(s) also sent:');
+    expect(renderMarkdown(report)).toContain('abc1234 Add applicability');
+  });
+
+  it('escapes angle brackets so markdown preview does not treat them as HTML', () => {
+    const report = buildReport({
+      answers: approveAnswers,
+      policy: {
+        decision: 'escalate',
+        rule: 'low_confidence',
+        reasons: ['primary_risk confidence=0.19 (< 0.5)'],
+      },
+      ...meta,
+    });
+    const markdown = renderMarkdown(report);
+
+    expect(markdown).toContain('primary_risk confidence=0.19 (&lt; 0.5)');
+    expect(markdown).not.toContain('(< 0.5)');
   });
 
   it('renders n/a instead of a zero when a score is not assessable', () => {
@@ -63,6 +85,28 @@ describe('renderMarkdown', () => {
     expect(markdown).toContain('| test_gap | n/a | — | better test coverage | not assessable from this state |');
     expect(markdown).not.toContain('| test_gap | 0.0 |');
   });
+
+  it('renders per-slice scorecards instead of blended scores', () => {
+    const slices = [
+      { files: ['src/a.ts', 'test/a.test.ts'], answers: approveAnswers, policy: decide(approveAnswers) },
+      { files: ['src/login.ts'], answers: securityAnswers, policy: decide(securityAnswers) },
+    ];
+    const report = buildReport({
+      answers: approveAnswers,
+      policy: combineSlicePolicies(slices),
+      slices,
+      ...meta,
+      files: ['src/a.ts', 'test/a.test.ts', 'src/login.ts'],
+    });
+    const markdown = renderMarkdown(report);
+
+    expect(markdown).toContain('**Decision:** `request_changes`');
+    expect(markdown).toContain('**Rule:** `any_slice_request_changes`');
+    expect(markdown).toContain('## Slices');
+    expect(markdown).toContain('### Slice 1: `src/a.ts`, `test/a.test.ts` — `approve`');
+    expect(markdown).toContain('### Slice 2: `src/login.ts` — `request_changes`');
+    expect(markdown).toContain('2 Jev calls');
+  });
 });
 
 describe('renderJson', () => {
@@ -72,9 +116,16 @@ describe('renderJson', () => {
       policy: decide(approveAnswers),
       ...meta,
     });
-    const parsed = JSON.parse(renderJson(report)) as { decision: string; scores: unknown };
+    const parsed = JSON.parse(renderJson(report)) as {
+      decision: string;
+      task: string;
+      taskOrigin: string;
+      scores: unknown;
+    };
 
     expect(parsed.decision).toBe('approve');
+    expect(parsed.task).toBe(meta.task);
+    expect(parsed.taskOrigin).toBe('cli');
     expect(parsed.scores).toMatchObject({
       correctness: { applicable: true, score: 3.6 },
     });

@@ -61,6 +61,12 @@ Add project patterns in [`jev-review.config.json`](jev-review.config.json):
 
 Patterns are gitignore-style (`*.md`, `dist/`, `!README.md`). Built-in defaults (lockfiles, images, wasm, source maps, …) are always included unless you set `"ignoreDefaults": false`. Pass `--config path/to/jev-review.config.json` to use another file. `.gitignore` still applies when collecting untracked files.
 
+## Packing large diffs
+
+The CLI estimates tokens (~3 characters per token) and reserves room for the question pack. Source files are grouped with their tests and packed first. If the change still exceeds Jev's budget, it is split into coherent slices and reviewed with one Jev call per slice.
+
+Slice decisions combine conservatively: `request_changes` or `escalate` in any slice wins; `approve` only if every slice would approve. Scores are not averaged. The report lists each slice instead of a blended scorecard.
+
 ## What Jev is asked
 
 All fourteen questions share the same state (`task`, `diff`, `files`) and run in one request. Each score has a paired applicability noul. Jev still answers the score (speculative fan-out); policy uses it only when applicability is ≥ 0.5. Otherwise the report shows `n/a` instead of a misleading 0.

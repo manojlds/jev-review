@@ -121,6 +121,63 @@ export function decide(answers: ReviewAnswers): PolicyResult {
   };
 }
 
+const DECISION_RANK: Record<Decision, number> = {
+  request_changes: 0,
+  escalate: 1,
+  comment: 2,
+  approve: 3,
+};
+
+/**
+ * Conservative merge of per-slice decisions. A block or escalate in any slice
+ * wins; approve only if every slice would approve. Scores are not averaged.
+ */
+export function combineSlicePolicies(
+  slices: Array<{ files: string[]; policy: PolicyResult }>
+): PolicyResult {
+  if (slices.length === 0) {
+    throw new Error('No review slices to combine.');
+  }
+  if (slices.length === 1) {
+    return slices[0]!.policy;
+  }
+
+  const worstRank = Math.min(...slices.map((slice) => DECISION_RANK[slice.policy.decision]));
+  const decision = (Object.keys(DECISION_RANK) as Decision[]).find(
+    (key) => DECISION_RANK[key] === worstRank
+  )!;
+  const matching = slices.filter((slice) => slice.policy.decision === decision);
+
+  if (decision === 'approve') {
+    return {
+      decision: 'approve',
+      rule: 'all_slices_safe_to_merge',
+      reasons: [`all ${slices.length} slices approved`],
+    };
+  }
+
+  const rule =
+    decision === 'request_changes'
+      ? 'any_slice_request_changes'
+      : decision === 'escalate'
+        ? 'any_slice_escalate'
+        : 'any_slice_comment';
+
+  return {
+    decision,
+    rule,
+    reasons: matching.flatMap((slice) =>
+      slice.policy.reasons.map((reason) => `${sliceLabel(slice.files)}: ${reason}`)
+    ),
+  };
+}
+
+function sliceLabel(files: string[]): string {
+  if (files.length === 0) return '(unlisted)';
+  if (files.length <= 2) return files.join(', ');
+  return `${files[0]} +${files.length - 1}`;
+}
+
 export function exitCodeFor(decision: Decision): number {
   switch (decision) {
     case 'approve':

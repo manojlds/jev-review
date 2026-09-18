@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  combineSlicePolicies,
   decide,
   exitCodeFor,
   noulCertainty,
@@ -91,6 +92,50 @@ describe('decide', () => {
       test_gap: { applicable: false as const, applicability: 0.09 },
     };
     expect(decide(answers).reasons.join(' ')).not.toContain('test_gap');
+  });
+});
+
+describe('combineSlicePolicies', () => {
+  it('returns the single slice policy unchanged', () => {
+    expect(
+      combineSlicePolicies([{ files: ['src/a.ts'], policy: decide(approveAnswers) }])
+    ).toMatchObject({ decision: 'approve', rule: 'safe_to_merge' });
+  });
+
+  it('blocks if any slice requests changes', () => {
+    expect(
+      combineSlicePolicies([
+        { files: ['src/a.ts'], policy: decide(approveAnswers) },
+        { files: ['src/login.ts'], policy: decide(securityAnswers) },
+      ])
+    ).toMatchObject({
+      decision: 'request_changes',
+      rule: 'any_slice_request_changes',
+    });
+  });
+
+  it('escalates rather than approving when one slice is uncertain', () => {
+    expect(
+      combineSlicePolicies([
+        { files: ['src/a.ts'], policy: decide(approveAnswers) },
+        { files: ['src/b.ts'], policy: decide(lowConfidenceAnswers) },
+      ])
+    ).toMatchObject({
+      decision: 'escalate',
+      rule: 'any_slice_escalate',
+    });
+  });
+
+  it('approves only when every slice would approve', () => {
+    expect(
+      combineSlicePolicies([
+        { files: ['src/a.ts'], policy: decide(approveAnswers) },
+        { files: ['src/b.ts'], policy: decide(approveAnswers) },
+      ])
+    ).toMatchObject({
+      decision: 'approve',
+      rule: 'all_slices_safe_to_merge',
+    });
   });
 });
 

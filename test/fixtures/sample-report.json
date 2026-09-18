@@ -10,6 +10,7 @@
     "outputTokens": 0
   },
   "task": "Authenticate users without storing or querying plaintext passwords.",
+  "taskOrigin": "cli",
   "source": "file:test/fixtures/synthetic.diff",
   "files": [
     "src/login.ts"

@@ -6,7 +6,8 @@ import { evaluateReview } from './client.js';
 import { formatCliError } from './errors.js';
 import { collectChange, reviewTaskFromChange } from './git.js';
 import { writeReportFile } from './output.js';
-import { decide, exitCodeFor } from './policy.js';
+import { planReview } from './pack.js';
+import { combineSlicePolicies, decide, exitCodeFor } from './policy.js';
 import { buildReport, renderJson, renderMarkdown } from './render.js';
 import { buildReviewState } from './state.js';
 
@@ -85,40 +86,78 @@ async function main(): Promise<number> {
     process.stderr.write('Using git commit messages as the review task.\n');
   }
 
-  const state = buildReviewState({
-    task: reviewTask.task,
-    commitMessages: reviewTask.commitMessages,
-    source: change.source,
-    files: change.files,
-    omitted: change.skipped,
-    diff: change.diff,
-  });
-
-  const extraOmitted = state.omitted.filter((file) => !change.skipped.includes(file));
-  if (extraOmitted.length > 0) {
+  const plan = planReview(change.diff, change.files);
+  const dropped = plan.omitted.filter((file) => !change.skipped.includes(file));
+  if (dropped.length > 0) {
     process.stderr.write(
-      `Truncated ${extraOmitted.length} file(s) to fit Jev's token budget: ${extraOmitted.join(', ')}\n`
+      `Truncated ${dropped.length} file(s) that exceeded Jev's token budget: ${dropped.join(', ')}\n`
+    );
+  }
+  if (plan.batches.length > 1) {
+    process.stderr.write(
+      `Splitting into ${plan.batches.length} Jev slices (source files kept with their tests).\n`
     );
   }
 
-  process.stderr.write(
-    `Evaluating ${state.files.length || 'unlisted'} file(s) from ${state.source} with Jev…\n`
-  );
+  const slices = [];
+  let clippedTask = reviewTask.task ?? '';
+  let clippedCommitMessages = reviewTask.commitMessages;
+  for (const [index, batch] of plan.batches.entries()) {
+    const state = buildReviewState({
+      task: reviewTask.task,
+      taskOrigin: reviewTask.origin,
+      commitMessages: reviewTask.commitMessages,
+      source: change.source,
+      files: batch.files,
+      omitted: [...change.skipped, ...plan.omitted],
+      diff: batch.diff,
+    });
+    if (index === 0) {
+      clippedTask = state.task;
+      clippedCommitMessages = state.commitMessages;
+    }
 
-  const result = await evaluateReview(state);
-  const answers = toReviewAnswers(result.answers);
-  const policy = decide(answers);
+    process.stderr.write(
+      `Evaluating slice ${index + 1}/${plan.batches.length}: ${
+        state.files.join(', ') || 'unlisted'
+      } from ${state.source}…\n`
+    );
+
+    const result = await evaluateReview(state);
+    const answers = toReviewAnswers(result.answers);
+    slices.push({
+      files: batch.files,
+      answers,
+      policy: decide(answers),
+      model: result.model,
+      usage: usageFrom(result),
+      truncated: state.truncated || batch.truncated,
+    });
+  }
+
+  const first = slices[0];
+  if (!first) {
+    process.stderr.write('No changes to review.\n');
+    return 0;
+  }
+
+  const policy = combineSlicePolicies(slices);
   const report = buildReport({
-    answers,
+    answers: first.answers,
     policy,
-    model: result.model,
-    usage: usageFrom(result),
-    task: state.task,
-    commitMessages: state.commitMessages,
-    source: state.source,
-    files: state.files,
-    omitted: state.omitted,
-    truncated: state.truncated,
+    slices,
+    model: uniqueModels(slices.map((slice) => slice.model)),
+    usage: {
+      inputTokens: slices.reduce((sum, slice) => sum + slice.usage.inputTokens, 0),
+      outputTokens: slices.reduce((sum, slice) => sum + slice.usage.outputTokens, 0),
+    },
+    task: clippedTask,
+    taskOrigin: reviewTask.origin,
+    commitMessages: clippedCommitMessages,
+    source: change.source,
+    files: plan.batches.flatMap((batch) => batch.files),
+    omitted: [...change.skipped, ...plan.omitted],
+    truncated: slices.some((slice) => slice.truncated) || plan.omitted.length > 0,
   });
 
   const rendered = values.json ? renderJson(report) : renderMarkdown(report);
@@ -138,4 +177,8 @@ main()
     process.stderr.write(`${formatCliError(error)}\n`);
     process.exitCode = 1;
   });
+
+function uniqueModels(models: string[]): string {
+  return [...new Set(models)].join(', ');
+}
 

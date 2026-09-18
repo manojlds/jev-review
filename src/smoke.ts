@@ -41,6 +41,7 @@ async function main(): Promise<void> {
     model: result.model,
     usage: usageFrom(result),
     task: state.task,
+    taskOrigin: state.taskOrigin,
     source: state.source,
     files: state.files,
     truncated: state.truncated,

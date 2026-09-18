@@ -10,6 +10,8 @@ export interface GitCommit {
   body: string;
 }
 
+export type TaskOrigin = 'git' | 'cli' | 'fallback';
+
 export interface CollectedChange {
   diff: string;
   files: string[];
@@ -190,13 +192,16 @@ export function parseCommitSpec(spec: string):
 export function reviewTaskFromChange(
   change: CollectedChange,
   explicitTask?: string
-): { task?: string; commitMessages?: string } {
+): { task?: string; commitMessages?: string; origin: TaskOrigin } {
   const derived = formatCommitMessages(change.commits, { uncommitted: change.uncommitted });
   const explicit = explicitTask?.trim();
   if (explicit) {
-    return { task: explicit, commitMessages: derived || undefined };
+    return { task: explicit, commitMessages: derived || undefined, origin: 'cli' };
   }
-  return { task: derived || undefined };
+  if (derived) {
+    return { task: derived, origin: 'git' };
+  }
+  return { origin: 'fallback' };
 }
 
 export function formatCommitMessages(

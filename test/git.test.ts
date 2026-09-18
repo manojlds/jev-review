@@ -197,7 +197,7 @@ describe('parseCommitSpec', () => {
 
 describe('reviewTaskFromChange', () => {
   it('uses commit messages as the task for local git reviews', () => {
-    const { task, commitMessages } = reviewTaskFromChange({
+    const { task, commitMessages, origin } = reviewTaskFromChange({
       diff: '',
       files: [],
       skipped: [],
@@ -206,13 +206,14 @@ describe('reviewTaskFromChange', () => {
       commits: [{ sha: 'abcdef123', subject: 'Add applicability', body: 'Skip n/a scores.' }],
     });
 
+    expect(origin).toBe('git');
     expect(task).toContain('Add applicability');
     expect(task).toContain('Skip n/a scores.');
     expect(commitMessages).toBeUndefined();
   });
 
   it('keeps --task and still passes git commit messages', () => {
-    const { task, commitMessages } = reviewTaskFromChange(
+    const { task, commitMessages, origin } = reviewTaskFromChange(
       {
         diff: '',
         files: [],
@@ -225,6 +226,7 @@ describe('reviewTaskFromChange', () => {
     );
 
     expect(task).toBe('Do not treat missing evidence as a 0.');
+    expect(origin).toBe('cli');
     expect(commitMessages).toContain('Uncommitted working tree changes.');
     expect(commitMessages).toContain('Add applicability');
   });
