@@ -1,6 +1,7 @@
 node_modules/
 dist/
 fixtures/live/
+jev-review.md
 .env
 .env.*
 *.log
