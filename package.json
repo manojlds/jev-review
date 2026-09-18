@@ -1,0 +1,31 @@
+{
+  "name": "jev-review",
+  "version": "0.1.0",
+  "description": "Standalone TypeSafe Jev code-review CLI: typed decisions over a local git diff.",
+  "type": "module",
+  "bin": {
+    "jev-review": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "review": "tsx src/cli.ts",
+    "smoke": "tsx src/smoke.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.5.1",
+  "license": "MIT",
+  "dependencies": {
+    "@typesafe-ai/sdk": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}

@@ -1,0 +1,11 @@
+diff --git a/src/login.ts b/src/login.ts
+index 1111111..2222222 100644
+--- a/src/login.ts
++++ b/src/login.ts
+@@ -1,8 +1,7 @@
+ export function login(user: string, password: string, db: Database) {
+-  const query = 'SELECT id FROM users WHERE name = $1 AND password_hash = $2';
+-  return db.query(query, [user, hash(password)]);
++  const query = `SELECT id FROM users WHERE name = '${user}' AND password = '${password}'`;
++  return db.query(query);
+ }

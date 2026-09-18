@@ -1,0 +1,96 @@
+{
+  "decision": "request_changes",
+  "rule": "security_concern",
+  "reasons": [
+    "has_security_concern=0.84 (>= 0.7)"
+  ],
+  "model": "jev-latest",
+  "usage": {
+    "inputTokens": 1840,
+    "outputTokens": 0
+  },
+  "task": "Authenticate users without storing or querying plaintext passwords.",
+  "source": "file:test/fixtures/synthetic.diff",
+  "files": [
+    "src/login.ts"
+  ],
+  "truncated": false,
+  "scores": {
+    "correctness": {
+      "score": 3.6,
+      "confidence": 0.82,
+      "nearestLevel": "The change clearly implements `task` as shown in `diff`.",
+      "higherMeans": "better correctness"
+    },
+    "test_gap": {
+      "score": 3.4,
+      "confidence": 0.74,
+      "nearestLevel": "The changed behavior is well covered by tests in `diff` or nearby files.",
+      "higherMeans": "better test coverage"
+    },
+    "security": {
+      "score": 0.4,
+      "confidence": 0.9,
+      "nearestLevel": "`diff` introduces a concrete, exploitable security issue.",
+      "higherMeans": "less new exposure"
+    },
+    "blast_radius": {
+      "score": 1.1,
+      "confidence": 0.8,
+      "nearestLevel": "Impact is mostly local with limited coupling.",
+      "higherMeans": "larger impact elsewhere"
+    }
+  },
+  "nouls": {
+    "safe_to_merge": {
+      "noul": 0.12,
+      "certainty": 0.88
+    },
+    "needs_human_review": {
+      "noul": 0.18,
+      "certainty": 0.82
+    },
+    "has_security_concern": {
+      "noul": 0.84,
+      "certainty": 0.84
+    }
+  },
+  "choices": {
+    "change_kind": {
+      "choice": "bugfix",
+      "confidence": 0.79,
+      "probabilities": {
+        "bugfix": 0.86,
+        "feature": 0.02,
+        "refactor": 0.02,
+        "tests": 0.02,
+        "docs": 0.02,
+        "chore": 0.02,
+        "other": 0.02
+      }
+    },
+    "primary_risk": {
+      "choice": "security",
+      "confidence": 0.86,
+      "probabilities": {
+        "correctness": 0.05,
+        "security": 0.88,
+        "tests": 0.03,
+        "complexity": 0.02,
+        "none": 0.02
+      }
+    },
+    "review_focus": {
+      "choice": "none",
+      "confidence": 0.71,
+      "probabilities": {
+        "logic": 0.08,
+        "api_contract": 0.05,
+        "data": 0.05,
+        "concurrency": 0.04,
+        "error_handling": 0.05,
+        "none": 0.73
+      }
+    }
+  }
+}
