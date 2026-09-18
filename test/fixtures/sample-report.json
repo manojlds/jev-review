@@ -48,6 +48,30 @@
       "confidence": 0.8,
       "nearestLevel": "Impact is mostly local with limited coupling.",
       "higherMeans": "larger impact elsewhere"
+    },
+    "reliability": {
+      "applicable": true,
+      "applicability": 0.92,
+      "score": 3.5,
+      "confidence": 0.8,
+      "nearestLevel": "Error propagation, cleanup, and recovery look deliberate for this change.",
+      "higherMeans": "more reliable failure handling"
+    },
+    "changeability": {
+      "applicable": true,
+      "applicability": 0.92,
+      "score": 3.3,
+      "confidence": 0.78,
+      "nearestLevel": "The next conceptual change has a mostly predictable, local edit surface.",
+      "higherMeans": "easier next edit"
+    },
+    "compatibility": {
+      "applicable": true,
+      "applicability": 0.92,
+      "score": 3.7,
+      "confidence": 0.74,
+      "nearestLevel": "Backwards compatibility is clearly preserved, or an explicit tested migration exists.",
+      "higherMeans": "more contract-stable"
     }
   },
   "nouls": {
@@ -99,6 +123,39 @@
         "concurrency": 0.04,
         "error_handling": 0.05,
         "none": 0.73
+      }
+    },
+    "reliability_weakness": {
+      "choice": "no_material_issue",
+      "confidence": 0.8,
+      "probabilities": {
+        "no_material_issue": 0.82,
+        "error_propagation": 0.06,
+        "cleanup": 0.04,
+        "timeout_retry": 0.04,
+        "concurrency": 0.04
+      }
+    },
+    "changeability_weakness": {
+      "choice": "no_material_issue",
+      "confidence": 0.8,
+      "probabilities": {
+        "no_material_issue": 0.81,
+        "scattered_rule": 0.06,
+        "shotgun_surgery": 0.05,
+        "brittle_chain": 0.04,
+        "hidden_dependency": 0.04
+      }
+    },
+    "compatibility_weakness": {
+      "choice": "no_material_issue",
+      "confidence": 0.8,
+      "probabilities": {
+        "no_material_issue": 0.84,
+        "breaking_change": 0.05,
+        "migration_gap": 0.04,
+        "version_assumption": 0.04,
+        "interoperability": 0.03
       }
     }
   }

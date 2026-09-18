@@ -4,8 +4,8 @@ import { choice, noul, score } from '@typesafe-ai/sdk';
  * Five-level rubrics, indexed 0–4. TypeSafe scores are a probability-weighted
  * mean of those indices and can land between levels.
  *
- * correctness, test_gap, and security: higher is better.
- * blast_radius: higher means more impact elsewhere.
+ * correctness, test_gap, security, reliability, changeability, compatibility:
+ * higher is better. blast_radius: higher means more impact elsewhere.
  */
 export const SCORE_LEVELS = {
   correctness: [
@@ -36,6 +36,27 @@ export const SCORE_LEVELS = {
     'Wide coupling; several other areas could be affected.',
     'The change can break unrelated systems or a large surface area.',
   ],
+  reliability: [
+    'Failure paths are unhandled; errors are swallowed or state is left inconsistent.',
+    'Important failure paths are missing or unsafe given `diff`.',
+    'The success path looks fine; notable error-handling gaps remain.',
+    'Credible failures are handled with limited residual risk.',
+    'Error propagation, cleanup, and recovery look deliberate for this change.',
+  ],
+  changeability: [
+    'A small conceptual change would require shotgun edits across unrelated modules.',
+    'Domain rules are scattered; the next edit has a large, unpredictable surface.',
+    'Moderate change amplification; some knowledge is duplicated or chained.',
+    'The next conceptual change has a mostly predictable, local edit surface.',
+    'Knowledge is centralized; a conceptual change would touch a small, obvious place.',
+  ],
+  compatibility: [
+    'The change breaks an existing public or integration contract without a migration.',
+    'Likely breaking change or missing compatibility path.',
+    'Contract risk remains; a reviewer should check APIs or migrations.',
+    'Affected contracts appear preserved with limited residual compatibility risk.',
+    'Backwards compatibility is clearly preserved, or an explicit tested migration exists.',
+  ],
 } as const;
 
 function applicable(label: string, extra: string) {
@@ -44,6 +65,16 @@ function applicable(label: string, extra: string) {
     {
       true: `The supplied state supports a defensible ${label} assessment.`,
       false: `${label} is irrelevant here, or the state is too thin to score.`,
+    }
+  );
+}
+
+function weakness(label: string, criteria: Record<string, string>) {
+  return choice(
+    `Identify the single most consequential ${label} weakness evidenced by \`diff\`. Choose no_material_issue when no listed concern is justified. Do not speculate beyond the state.`,
+    {
+      no_material_issue: 'No material issue is evident from the supplied state.',
+      ...criteria,
     }
   );
 }
@@ -81,6 +112,48 @@ export const reviewQuestions = {
     'How much else can the change in `diff` break? Higher means a larger blast radius.',
     SCORE_LEVELS.blast_radius
   ),
+  reliability_applicable: applicable(
+    'reliability',
+    'Answer no when `diff` has no runtime, control-flow, or error paths (docs, comments, pure types). Answer yes when code can fail, throw, retry, or leave state.'
+  ),
+  reliability: score(
+    'How well does the change in `diff` handle failure? Judge error propagation, cleanup, retries, timeouts, races, and recovery. Higher means more reliable.',
+    SCORE_LEVELS.reliability
+  ),
+  reliability_weakness: weakness('reliability', {
+    error_propagation: 'Errors are swallowed, distorted, or propagated without useful boundaries.',
+    cleanup: 'A failure path can leave resources or state inconsistent.',
+    timeout_retry: 'Timeout or retry behavior is missing, unsafe, or disproportionate.',
+    concurrency: 'A race or concurrency assumption threatens reliable behavior.',
+  }),
+  changeability_applicable: applicable(
+    'changeability',
+    'Answer no when the change is isolated docs or too thin to judge where knowledge lives. Answer yes when `diff` shows structure that the next edit would have to follow.'
+  ),
+  changeability: score(
+    'How easy is the next conceptual change after this `diff`? Judge shotgun surgery, scattered rules, and brittle chains. Higher means a smaller, more predictable edit surface.',
+    SCORE_LEVELS.changeability
+  ),
+  changeability_weakness: weakness('changeability', {
+    scattered_rule: 'A domain rule or decision is scattered across multiple locations.',
+    shotgun_surgery: 'A small conceptual change is likely to require edits in many places.',
+    brittle_chain: 'A brittle dependency chain amplifies otherwise local changes.',
+    hidden_dependency: 'Hidden dependencies make the impact of a change unpredictable.',
+  }),
+  compatibility_applicable: applicable(
+    'compatibility',
+    'Answer yes only when `diff` touches public APIs, exported types, endpoints, migrations, versions, or integrations. Answer no for internal-only changes with no contract surface.'
+  ),
+  compatibility: score(
+    'How well does the change in `diff` preserve existing contracts? Judge breaking changes, migrations, and interoperability. Higher means more compatible.',
+    SCORE_LEVELS.compatibility
+  ),
+  compatibility_weakness: weakness('compatibility', {
+    breaking_change: 'The change appears to break an existing public or integration contract.',
+    migration_gap: 'A required migration or compatibility path is missing.',
+    version_assumption: 'The implementation assumes a version or capability not established by the state.',
+    interoperability: 'The change reduces interoperability across supported consumers.',
+  }),
   safe_to_merge: noul('Is the change in `diff` safe to merge as-is given `task`?', {
     true: 'No blocking correctness, security, or test gaps given the supplied state.',
     false: 'The change should not merge without further work.',

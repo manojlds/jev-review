@@ -33,6 +33,9 @@ export interface ReviewReport {
     test_gap: ScoreView;
     security: ScoreView;
     blast_radius: ScoreView;
+    reliability: ScoreView;
+    changeability: ScoreView;
+    compatibility: ScoreView;
   };
   nouls: {
     safe_to_merge: NoulView;
@@ -43,6 +46,9 @@ export interface ReviewReport {
     change_kind: ChoiceView;
     primary_risk: ChoiceView;
     review_focus: ChoiceView;
+    reliability_weakness: ChoiceView;
+    changeability_weakness: ChoiceView;
+    compatibility_weakness: ChoiceView;
   };
   slices?: SliceReport[];
 }
@@ -184,6 +190,17 @@ function scorecardFromAnswers(answers: ReviewAnswers): Pick<ReviewReport, 'score
         SCORE_LEVELS.blast_radius,
         'larger impact elsewhere'
       ),
+      reliability: scoreView(answers.reliability, SCORE_LEVELS.reliability, 'more reliable failure handling'),
+      changeability: scoreView(
+        answers.changeability,
+        SCORE_LEVELS.changeability,
+        'easier next edit'
+      ),
+      compatibility: scoreView(
+        answers.compatibility,
+        SCORE_LEVELS.compatibility,
+        'more contract-stable'
+      ),
     },
     nouls: {
       safe_to_merge: noulView(answers.safe_to_merge.noul),
@@ -194,6 +211,9 @@ function scorecardFromAnswers(answers: ReviewAnswers): Pick<ReviewReport, 'score
       change_kind: choiceView(answers.change_kind),
       primary_risk: choiceView(answers.primary_risk),
       review_focus: choiceView(answers.review_focus),
+      reliability_weakness: choiceView(answers.reliability_weakness),
+      changeability_weakness: choiceView(answers.changeability_weakness),
+      compatibility_weakness: choiceView(answers.compatibility_weakness),
     },
   };
 }
@@ -225,6 +245,9 @@ ${scoreRow('correctness', view.scores.correctness)}
 ${scoreRow('test_gap', view.scores.test_gap)}
 ${scoreRow('security', view.scores.security)}
 ${scoreRow('blast_radius', view.scores.blast_radius)}
+${scoreRow('reliability', view.scores.reliability)}
+${scoreRow('changeability', view.scores.changeability)}
+${scoreRow('compatibility', view.scores.compatibility)}
 
 ## Gates
 
@@ -240,7 +263,15 @@ ${noulRow('has_security_concern', view.nouls.has_security_concern)}
 | --- | --- | ---: |
 | change_kind | ${view.choices.change_kind.choice} | ${pct(view.choices.change_kind.confidence)} |
 | primary_risk | ${view.choices.primary_risk.choice} | ${pct(view.choices.primary_risk.confidence)} |
-| review_focus | ${view.choices.review_focus.choice} | ${pct(view.choices.review_focus.confidence)} |`;
+| review_focus | ${view.choices.review_focus.choice} | ${pct(view.choices.review_focus.confidence)} |
+
+## Weaknesses
+
+| Dimension | Weakness | Confidence |
+| --- | --- | ---: |
+${weaknessRow('reliability', view.scores.reliability, view.choices.reliability_weakness)}
+${weaknessRow('changeability', view.scores.changeability, view.choices.changeability_weakness)}
+${weaknessRow('compatibility', view.scores.compatibility, view.choices.compatibility_weakness)} |`;
 }
 
 function scoreView(
@@ -297,6 +328,13 @@ function scoreRow(name: string, view: ScoreView): string {
 
 function noulRow(name: string, view: NoulView): string {
   return `| ${name} | ${view.noul.toFixed(2)} | ${pct(view.certainty)} |`;
+}
+
+function weaknessRow(name: string, score: ScoreView, view: ChoiceView): string {
+  if (!score.applicable) {
+    return `| ${name} | n/a | — |`;
+  }
+  return `| ${name} | ${view.choice} | ${pct(view.confidence)} |`;
 }
 
 function pct(value: number): string {

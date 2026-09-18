@@ -93,6 +93,25 @@ describe('decide', () => {
     };
     expect(decide(answers).reasons.join(' ')).not.toContain('test_gap');
   });
+
+  it('cites weak reliability and changeability as comment caveats', () => {
+    const reasons = decide(commentAnswers).reasons.join(' ');
+    expect(reasons).toContain('reliability=1.9');
+    expect(reasons).toContain('changeability=1.5');
+    expect(reasons).toContain('compatibility=2.4');
+  });
+
+  it('does not cite inapplicable reliability or compatibility in comment reasons', () => {
+    const answers = {
+      ...commentAnswers,
+      reliability: { applicable: false as const, applicability: 0.12 },
+      compatibility: { applicable: false as const, applicability: 0.09 },
+    };
+    const reasons = decide(answers).reasons.join(' ');
+    expect(reasons).not.toContain('reliability');
+    expect(reasons).not.toContain('compatibility');
+    expect(reasons).toContain('changeability=1.5');
+  });
 });
 
 describe('combineSlicePolicies', () => {

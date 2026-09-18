@@ -43,6 +43,10 @@ describe('renderMarkdown', () => {
 
     expect(markdown).toContain('**Decision:** `approve`');
     expect(markdown).toContain('| correctness | 3.6 |');
+    expect(markdown).toContain('| reliability | 3.5 |');
+    expect(markdown).toContain('| changeability | 3.3 |');
+    expect(markdown).toContain('## Weaknesses');
+    expect(markdown).toContain('| reliability | no_material_issue |');
     expect(markdown).toContain('1840 input tokens');
   });
 
@@ -84,6 +88,8 @@ describe('renderMarkdown', () => {
 
     expect(markdown).toContain('| test_gap | n/a | — | better test coverage | not assessable from this state |');
     expect(markdown).not.toContain('| test_gap | 0.0 |');
+    expect(markdown).toContain('| compatibility | n/a |');
+    expect(markdown).toContain('| compatibility | n/a | — |');
   });
 
   it('renders per-slice scorecards instead of blended scores', () => {

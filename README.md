@@ -5,7 +5,7 @@ A standalone [TypeSafe Jev](https://typesafe.ai/blog/introducing-system-one-mode
 Jev does not write review comments. It answers Noul, Choice, and Score questions in parallel. This CLI is the System Two around that function call.
 
 ```text
-git diff  →  bounded state  →  one Jev call (14 questions)  →  policy in code  →  approve | comment | request_changes | escalate
+git diff  →  bounded state  →  one Jev call (23 questions)  →  policy in code  →  approve | comment | request_changes | escalate
 ```
 
 This is intentionally not [DRS](https://github.com/manojlds/drs). DRS can optionally hang a 19-metric Jev scorecard next to an LLM reviewer. Here Jev *is* the reviewer, and the surrounding code is the deliberation.
@@ -63,24 +63,36 @@ Patterns are gitignore-style (`*.md`, `dist/`, `!README.md`). Built-in defaults 
 
 ## Packing large diffs
 
-The CLI estimates tokens (~3 characters per token) and reserves room for the question pack. Source files are grouped with their tests and packed first. If the change still exceeds Jev's budget, it is split into coherent slices and reviewed with one Jev call per slice.
+The CLI estimates tokens (~3 characters per token) and reserves about 12k tokens for the 23-question pack (~20k left for the diff). Source files are grouped with their tests and packed first. If the change still exceeds Jev's budget, it is split into coherent slices and reviewed with one Jev call per slice.
 
 Slice decisions combine conservatively: `request_changes` or `escalate` in any slice wins; `approve` only if every slice would approve. Scores are not averaged. The report lists each slice instead of a blended scorecard.
 
 ## What Jev is asked
 
-All fourteen questions share the same state (`task`, `diff`, `files`) and run in one request. Each score has a paired applicability noul. Jev still answers the score (speculative fan-out); policy uses it only when applicability is ≥ 0.5. Otherwise the report shows `n/a` instead of a misleading 0.
+All twenty-three questions share the same state (`task`, `diff`, `files`) and run in one request. Each score has a paired applicability noul. Jev still answers the score (speculative fan-out); policy uses it only when applicability is ≥ 0.5. Otherwise the report shows `n/a` instead of a misleading 0.
+
+This is a merge gate, not a 19-metric quality loop. The extra dimensions are reliability, changeability, and compatibility. Readability, maintainability, performance, and similar agent-loop scores are out of scope.
+
+### Scores (0–4)
+
+| ID | Higher means | Role |
+| --- | --- | --- |
+| `correctness` | better | Right relative to `task`. |
+| `test_gap` | better coverage | Tests cover the changed behavior. |
+| `security` | less new exposure | Diff does not add a security issue. |
+| `blast_radius` | **more** impact | How much else this change can break. |
+| `reliability` | better | Failure paths, cleanup, retries, races. |
+| `changeability` | easier next edit | How local and predictable the next conceptual change is. |
+| `compatibility` | more stable | Public APIs, migrations, versions, integrations. |
+
+`blast_radius` is “what else breaks now.” `changeability` is “how hard is the next edit.” `compatibility` is conditional: applicability should be no unless the diff shows a contract surface.
+
+`reliability`, `changeability`, and `compatibility` each also have a `*_weakness` Choice (`no_material_issue` or a concrete failure mode). The markdown report has a Weaknesses table; a row is `n/a` when the paired score is not applicable. Every score has a paired `*_applicable` noul in `src/questions.ts`.
+
+### Gates and classification
 
 | ID | Type | Role |
 | --- | --- | --- |
-| `correctness_applicable` | Noul | Can correctness be judged from this state? |
-| `correctness` | Score 0–4 | Is the change right relative to the task? |
-| `test_gap_applicable` | Noul | Can test coverage be judged from this state? |
-| `test_gap` | Score 0–4 | How well do tests cover the change? Higher is better coverage. |
-| `security_applicable` | Noul | Can security be judged from this state? |
-| `security` | Score 0–4 | How little new exposure does the diff add? |
-| `blast_radius_applicable` | Noul | Can blast radius be judged from this state? |
-| `blast_radius` | Score 0–4 | How much else can this break? Higher is more impact. |
 | `safe_to_merge` | Noul | P(merge as-is) |
 | `needs_human_review` | Noul | P(a person should look) |
 | `has_security_concern` | Noul | P(concrete security issue in the state) |
@@ -98,7 +110,7 @@ All fourteen questions share the same state (`task`, `diff`, `files`) and run in
 4. Uncertain noul or low confidence on the winning questions → `escalate`
 5. Otherwise `comment` (mergeable with caveats)
 
-Inapplicable scores are skipped: a docs-only diff does not fail for `test_gap = 0`.
+Inapplicable scores are skipped: a docs-only diff does not fail for `test_gap = 0`. Applicable `reliability`, `changeability`, or `compatibility` below 3 become comment caveats, not merge blocks. They still count toward the approve confidence floor when they are applicable.
 
 ## Tests and live smoke
 

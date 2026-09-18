@@ -2,7 +2,7 @@ import { parseDiffFiles, splitDiffHunks } from './git.js';
 
 /** Jev's shared request budget. Questions take part of this. */
 export const JEV_TOKEN_BUDGET = 32_768;
-export const QUESTION_RESERVE_TOKENS = 8_000;
+export const QUESTION_RESERVE_TOKENS = 12_000;
 export const MAX_DIFF_TOKENS = JEV_TOKEN_BUDGET - QUESTION_RESERVE_TOKENS;
 /** Code is denser than English; underestimate chars/token so we stay under. */
 export const CHARS_PER_TOKEN = 3;

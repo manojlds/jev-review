@@ -22,11 +22,49 @@ function notApplicable(applicability = 0.12): Extract<MetricEvaluation, { applic
   return { applicable: false, applicability };
 }
 
+function weaknessChoice(
+  choice: string,
+  probabilities: Record<string, number>,
+  confidence = 0.8
+): ReviewAnswers['reliability_weakness'] {
+  return { choice, confidence, probabilities };
+}
+
+const reliabilityNone = weaknessChoice('no_material_issue', {
+  no_material_issue: 0.82,
+  error_propagation: 0.06,
+  cleanup: 0.04,
+  timeout_retry: 0.04,
+  concurrency: 0.04,
+});
+
+const changeabilityNone = weaknessChoice('no_material_issue', {
+  no_material_issue: 0.81,
+  scattered_rule: 0.06,
+  shotgun_surgery: 0.05,
+  brittle_chain: 0.04,
+  hidden_dependency: 0.04,
+});
+
+const compatibilityNone = weaknessChoice('no_material_issue', {
+  no_material_issue: 0.84,
+  breaking_change: 0.05,
+  migration_gap: 0.04,
+  version_assumption: 0.04,
+  interoperability: 0.03,
+});
+
 export const approveAnswers: ReviewAnswers = {
   correctness: scored(3.6, 0.82),
   test_gap: scored(3.4, 0.74),
   security: scored(3.8, 0.88),
   blast_radius: scored(1.1, 0.8),
+  reliability: scored(3.5, 0.8),
+  changeability: scored(3.3, 0.78),
+  compatibility: scored(3.7, 0.74),
+  reliability_weakness: reliabilityNone,
+  changeability_weakness: changeabilityNone,
+  compatibility_weakness: compatibilityNone,
   safe_to_merge: { noul: 0.91 },
   needs_human_review: { noul: 0.18 },
   has_security_concern: { noul: 0.06 },
@@ -151,12 +189,41 @@ export const commentAnswers: ReviewAnswers = {
       none: 0.03,
     },
   },
+  reliability: scored(1.9, 0.71),
+  changeability: scored(1.5, 0.68),
+  compatibility: scored(2.4, 0.66),
+  reliability_weakness: weaknessChoice(
+    'error_propagation',
+    {
+      no_material_issue: 0.08,
+      error_propagation: 0.72,
+      cleanup: 0.08,
+      timeout_retry: 0.07,
+      concurrency: 0.05,
+    },
+    0.7
+  ),
+  changeability_weakness: weaknessChoice(
+    'shotgun_surgery',
+    {
+      no_material_issue: 0.07,
+      scattered_rule: 0.14,
+      shotgun_surgery: 0.68,
+      brittle_chain: 0.07,
+      hidden_dependency: 0.04,
+    },
+    0.67
+  ),
+  compatibility_weakness: compatibilityNone,
 };
 
 /** Docs/CLI-style change: coverage is not assessable, so a 0 score must not count. */
 export const docsAnswers: ReviewAnswers = {
   ...approveAnswers,
   test_gap: notApplicable(0.08),
+  reliability: notApplicable(0.14),
+  changeability: notApplicable(0.16),
+  compatibility: notApplicable(0.1),
   change_kind: {
     choice: 'docs',
     confidence: 0.84,

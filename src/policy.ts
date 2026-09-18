@@ -26,17 +26,35 @@ export interface ChoiceAnswer {
   probabilities: Record<string, number>;
 }
 
+export const SCORE_METRIC_KEYS = [
+  'correctness',
+  'test_gap',
+  'security',
+  'blast_radius',
+  'reliability',
+  'changeability',
+  'compatibility',
+] as const;
+
+export type ScoreMetricKey = (typeof SCORE_METRIC_KEYS)[number];
+
 export interface ReviewAnswers {
   correctness: MetricEvaluation;
   test_gap: MetricEvaluation;
   security: MetricEvaluation;
   blast_radius: MetricEvaluation;
+  reliability: MetricEvaluation;
+  changeability: MetricEvaluation;
+  compatibility: MetricEvaluation;
   safe_to_merge: NoulAnswer;
   needs_human_review: NoulAnswer;
   has_security_concern: NoulAnswer;
   change_kind: ChoiceAnswer;
   primary_risk: ChoiceAnswer;
   review_focus: ChoiceAnswer;
+  reliability_weakness: ChoiceAnswer;
+  changeability_weakness: ChoiceAnswer;
+  compatibility_weakness: ChoiceAnswer;
 }
 
 export interface PolicyResult {
@@ -191,7 +209,7 @@ export function exitCodeFor(decision: Decision): number {
 }
 
 function scoredConfidences(answers: ReviewAnswers): number[] {
-  return [answers.correctness, answers.test_gap, answers.security, answers.blast_radius]
+  return SCORE_METRIC_KEYS.map((key) => answers[key])
     .filter(isScored)
     .map((metric) => metric.confidence);
 }
@@ -233,6 +251,15 @@ function commentReasons(answers: ReviewAnswers): string[] {
   }
   if (isScored(answers.blast_radius) && answers.blast_radius.score >= 3) {
     reasons.push(`blast_radius=${formatScore(answers.blast_radius.score)} (wide impact)`);
+  }
+  if (isScored(answers.reliability) && answers.reliability.score < 3) {
+    reasons.push(`reliability=${formatScore(answers.reliability.score)} (failure paths weak)`);
+  }
+  if (isScored(answers.changeability) && answers.changeability.score < 3) {
+    reasons.push(`changeability=${formatScore(answers.changeability.score)} (next edit is hard)`);
+  }
+  if (isScored(answers.compatibility) && answers.compatibility.score < 3) {
+    reasons.push(`compatibility=${formatScore(answers.compatibility.score)} (contract risk)`);
   }
 
   return reasons;
