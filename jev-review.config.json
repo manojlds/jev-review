@@ -4,6 +4,8 @@
     "package-lock.json",
     "yarn.lock",
     "bun.lock",
-    "bun.lockb"
+    "bun.lockb",
+    "jev-review.md",
+    "jev-review.json"
   ]
 }

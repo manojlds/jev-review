@@ -28,10 +28,14 @@ pnpm review --help
 pnpm review                         # staged + unstaged vs HEAD
 pnpm review --base main
 pnpm review --diff test/fixtures/synthetic.diff --task "Don't query plaintext passwords"
+pnpm review --output jev-review.md
 pnpm review --json
+pnpm review --json --output jev-review.json
 ```
 
 After `pnpm build`, `node dist/cli.js` is the same CLI (`jev-review` if you link the package).
+
+`--output` writes the same scorecard to a file (markdown by default, JSON with `--json`) and still prints it to stdout.
 
 Exit codes: `0` approve or comment, `1` request changes (or a tool error), `2` escalate because confidence is too low to act.
 

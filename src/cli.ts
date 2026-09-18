@@ -5,6 +5,7 @@ import { toReviewAnswers, usageFrom } from './answers.js';
 import { evaluateReview } from './client.js';
 import { formatCliError } from './errors.js';
 import { collectChange } from './git.js';
+import { writeReportFile } from './output.js';
 import { decide, exitCodeFor } from './policy.js';
 import { buildReport, renderJson, renderMarkdown } from './render.js';
 import { buildReviewState } from './state.js';
@@ -12,8 +13,8 @@ import { buildReviewState } from './state.js';
 const HELP = `jev-review — typed TypeSafe Jev decisions over a local git diff
 
 Usage:
-  jev-review [--base <ref>] [--task <text>] [--json]
-  jev-review --diff <file.patch> [--task <text>] [--json]
+  jev-review [--base <ref>] [--task <text>] [--output <file>]
+  jev-review --diff <file.patch> [--task <text>] [--output <file>] [--json]
 
 Options:
   --base <ref>   Diff the working tree against this ref (default: HEAD, or the
@@ -22,6 +23,8 @@ Options:
   --task <text>  What the change is supposed to do
   --config <path>
                  jev-review.config.json (default: ./jev-review.config.json)
+  --output <file>
+                 Write the report to a file (markdown, or JSON with --json)
   --json         Print a machine-readable report
   --help         Show this help
 
@@ -41,6 +44,7 @@ async function main(): Promise<number> {
       diff: { type: 'string' },
       task: { type: 'string' },
       config: { type: 'string' },
+      output: { type: 'string' },
       json: { type: 'boolean', default: false },
       help: { type: 'boolean', default: false },
     },
@@ -103,7 +107,12 @@ async function main(): Promise<number> {
     truncated: state.truncated,
   });
 
-  process.stdout.write(values.json ? renderJson(report) : renderMarkdown(report));
+  const rendered = values.json ? renderJson(report) : renderMarkdown(report);
+  if (values.output) {
+    writeReportFile(values.output, rendered);
+    process.stderr.write(`Wrote ${values.output}\n`);
+  }
+  process.stdout.write(rendered);
   return exitCodeFor(policy.decision);
 }
 
