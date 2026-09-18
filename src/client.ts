@@ -26,6 +26,7 @@ export async function evaluateReview(state: ReviewState, apiKey?: string) {
   return client.systemOne({
     state: {
       task: state.task,
+      ...(state.commitMessages ? { commit_messages: state.commitMessages } : {}),
       source: state.source,
       files: state.files,
       omitted: state.omitted,

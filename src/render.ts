@@ -1,8 +1,10 @@
 import { nearestLevel, SCORE_LEVELS } from './questions.js';
 import {
   decide,
+  isScored,
   noulCertainty,
   type Decision,
+  type MetricEvaluation,
   type PolicyResult,
   type ReviewAnswers,
 } from './policy.js';
@@ -19,6 +21,7 @@ export interface ReviewReport {
   model: string;
   usage: ReviewUsage;
   task: string;
+  commitMessages?: string;
   source: string;
   files: string[];
   omitted: string[];
@@ -41,12 +44,20 @@ export interface ReviewReport {
   };
 }
 
-interface ScoreView {
-  score: number;
-  confidence: number;
-  nearestLevel: string;
-  higherMeans: string;
-}
+type ScoreView =
+  | {
+      applicable: false;
+      applicability: number;
+      higherMeans: string;
+    }
+  | {
+      applicable: true;
+      applicability: number;
+      score: number;
+      confidence: number;
+      nearestLevel: string;
+      higherMeans: string;
+    };
 
 interface NoulView {
   noul: number;
@@ -64,6 +75,7 @@ export function buildReport(options: {
   model: string;
   usage: ReviewUsage;
   task: string;
+  commitMessages?: string;
   source: string;
   files: string[];
   omitted?: string[];
@@ -80,6 +92,7 @@ export function buildReport(options: {
     model: options.model,
     usage: options.usage,
     task: options.task,
+    commitMessages: options.commitMessages,
     source: options.source,
     files: options.files,
     omitted: options.omitted ?? [],
@@ -158,8 +171,8 @@ ${noulRow('has_security_concern', report.nouls.has_security_concern)}
 ## Context
 
 - **Source:** ${report.source}
-- **Task:** ${report.task}
-- **Files:** ${files}${omitted}
+- **Task:** ${indentMultiline(report.task)}
+${report.commitMessages ? `- **Commit messages:** ${indentMultiline(report.commitMessages)}\n` : ''}- **Files:** ${files}${omitted}
 - **Usage:** ${report.usage.inputTokens} input tokens, ${report.usage.outputTokens} output tokens
 ${truncated}`;
 }
@@ -169,11 +182,20 @@ export function renderJson(report: ReviewReport): string {
 }
 
 function scoreView(
-  answer: { score: number; confidence: number },
+  answer: MetricEvaluation,
   levels: readonly string[],
   higherMeans: string
 ): ScoreView {
+  if (!isScored(answer)) {
+    return {
+      applicable: false,
+      applicability: round(answer.applicability, 2),
+      higherMeans,
+    };
+  }
   return {
+    applicable: true,
+    applicability: round(answer.applicability, 2),
     score: round(answer.score, 1),
     confidence: round(answer.confidence, 2),
     nearestLevel: nearestLevel(answer.score, levels),
@@ -205,6 +227,9 @@ function choiceView(answer: {
 }
 
 function scoreRow(name: string, view: ScoreView): string {
+  if (!view.applicable) {
+    return `| ${name} | n/a | — | ${view.higherMeans} | not assessable from this state |`;
+  }
   return `| ${name} | ${view.score.toFixed(1)} | ${pct(view.confidence)} | ${view.higherMeans} | ${escapeCell(view.nearestLevel)} |`;
 }
 
@@ -223,4 +248,8 @@ function round(value: number, digits: number): number {
 
 function escapeCell(value: string): string {
   return value.replaceAll('|', '\\|');
+}
+
+function indentMultiline(value: string): string {
+  return value.replaceAll('\n', '\n  ');
 }

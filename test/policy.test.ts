@@ -8,6 +8,7 @@ import {
 import {
   approveAnswers,
   commentAnswers,
+  docsAnswers,
   lowConfidenceAnswers,
   lowCorrectnessAnswers,
   securityAnswers,
@@ -64,6 +65,32 @@ describe('decide', () => {
       has_security_concern: { noul: 0.9 },
     };
     expect(decide(answers).rule).toBe('security_concern');
+  });
+
+  it('does not treat an inapplicable correctness score as a merge block', () => {
+    const answers = {
+      ...approveAnswers,
+      correctness: { applicable: false as const, applicability: 0.11 },
+    };
+    expect(decide(answers)).toMatchObject({
+      decision: 'approve',
+      rule: 'safe_to_merge',
+    });
+  });
+
+  it('approves when test coverage is not assessable instead of scoring it as 0', () => {
+    expect(decide(docsAnswers)).toMatchObject({
+      decision: 'approve',
+      rule: 'safe_to_merge',
+    });
+  });
+
+  it('does not cite coverage gaps when test_gap is not applicable', () => {
+    const answers = {
+      ...commentAnswers,
+      test_gap: { applicable: false as const, applicability: 0.09 },
+    };
+    expect(decide(answers).reasons.join(' ')).not.toContain('test_gap');
   });
 });
 

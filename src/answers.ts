@@ -1,22 +1,45 @@
-import type { ReviewAnswers } from './policy.js';
+import {
+  APPLICABLE_THRESHOLD,
+  type MetricEvaluation,
+  type ReviewAnswers,
+} from './policy.js';
+
+interface SdkScore {
+  score: number;
+  confidence: number;
+}
+
+interface SdkNoul {
+  noul: number;
+}
+
+interface SdkChoice {
+  choice: string;
+  confidence: number;
+  probabilities: Record<string, number>;
+}
 
 export function toReviewAnswers(answers: {
-  correctness: ReviewAnswers['correctness'];
-  test_gap: ReviewAnswers['test_gap'];
-  security: ReviewAnswers['security'];
-  blast_radius: ReviewAnswers['blast_radius'];
-  safe_to_merge: ReviewAnswers['safe_to_merge'];
-  needs_human_review: ReviewAnswers['needs_human_review'];
-  has_security_concern: ReviewAnswers['has_security_concern'];
-  change_kind: ReviewAnswers['change_kind'];
-  primary_risk: ReviewAnswers['primary_risk'];
-  review_focus: ReviewAnswers['review_focus'];
+  correctness_applicable: SdkNoul;
+  correctness: SdkScore;
+  test_gap_applicable: SdkNoul;
+  test_gap: SdkScore;
+  security_applicable: SdkNoul;
+  security: SdkScore;
+  blast_radius_applicable: SdkNoul;
+  blast_radius: SdkScore;
+  safe_to_merge: SdkNoul;
+  needs_human_review: SdkNoul;
+  has_security_concern: SdkNoul;
+  change_kind: SdkChoice;
+  primary_risk: SdkChoice;
+  review_focus: SdkChoice;
 }): ReviewAnswers {
   return {
-    correctness: pickScore(answers.correctness),
-    test_gap: pickScore(answers.test_gap),
-    security: pickScore(answers.security),
-    blast_radius: pickScore(answers.blast_radius),
+    correctness: applyMetric(answers.correctness_applicable, answers.correctness),
+    test_gap: applyMetric(answers.test_gap_applicable, answers.test_gap),
+    security: applyMetric(answers.security_applicable, answers.security),
+    blast_radius: applyMetric(answers.blast_radius_applicable, answers.blast_radius),
     safe_to_merge: { noul: answers.safe_to_merge.noul },
     needs_human_review: { noul: answers.needs_human_review.noul },
     has_security_concern: { noul: answers.has_security_concern.noul },
@@ -36,11 +59,23 @@ export function usageFrom(result: { usage: { input_tokens: number; output_tokens
   };
 }
 
-function pickScore(answer: ReviewAnswers['correctness']): ReviewAnswers['correctness'] {
-  return { score: answer.score, confidence: answer.confidence };
+/**
+ * Speculative fan-out: Jev still answers every score. Policy uses the score
+ * only when the paired applicability noul clears the threshold.
+ */
+export function applyMetric(applicable: SdkNoul, scored: SdkScore): MetricEvaluation {
+  if (applicable.noul < APPLICABLE_THRESHOLD) {
+    return { applicable: false, applicability: applicable.noul };
+  }
+  return {
+    applicable: true,
+    applicability: applicable.noul,
+    score: scored.score,
+    confidence: scored.confidence,
+  };
 }
 
-function pickChoice(answer: ReviewAnswers['change_kind']): ReviewAnswers['change_kind'] {
+function pickChoice(answer: SdkChoice): ReviewAnswers['change_kind'] {
   return {
     choice: answer.choice,
     confidence: answer.confidence,

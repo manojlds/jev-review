@@ -17,24 +17,32 @@
   "truncated": false,
   "scores": {
     "correctness": {
+      "applicable": true,
+      "applicability": 0.92,
       "score": 3.6,
       "confidence": 0.82,
       "nearestLevel": "The change clearly implements `task` as shown in `diff`.",
       "higherMeans": "better correctness"
     },
     "test_gap": {
+      "applicable": true,
+      "applicability": 0.92,
       "score": 3.4,
       "confidence": 0.74,
       "nearestLevel": "The changed behavior is well covered by tests in `diff` or nearby files.",
       "higherMeans": "better test coverage"
     },
     "security": {
+      "applicable": true,
+      "applicability": 0.92,
       "score": 0.4,
       "confidence": 0.9,
       "nearestLevel": "`diff` introduces a concrete, exploitable security issue.",
       "higherMeans": "less new exposure"
     },
     "blast_radius": {
+      "applicable": true,
+      "applicability": 0.92,
       "score": 1.1,
       "confidence": 0.8,
       "nearestLevel": "Impact is mostly local with limited coupling.",

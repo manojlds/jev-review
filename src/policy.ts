@@ -7,13 +7,14 @@ export const HIGH_SCORE_CONFIDENCE = 0.6;
 export const LOW_SCORE_CONFIDENCE = 0.5;
 export const NOUL_UNCERTAIN_LOW = 0.35;
 export const NOUL_UNCERTAIN_HIGH = 0.65;
+/** Applicability noul below this means the score is not used. */
+export const APPLICABLE_THRESHOLD = 0.5;
 
 export type Decision = 'approve' | 'request_changes' | 'escalate' | 'comment';
 
-export interface ScoreAnswer {
-  score: number;
-  confidence: number;
-}
+export type MetricEvaluation =
+  | { applicable: false; applicability: number }
+  | { applicable: true; applicability: number; score: number; confidence: number };
 
 export interface NoulAnswer {
   noul: number;
@@ -26,10 +27,10 @@ export interface ChoiceAnswer {
 }
 
 export interface ReviewAnswers {
-  correctness: ScoreAnswer;
-  test_gap: ScoreAnswer;
-  security: ScoreAnswer;
-  blast_radius: ScoreAnswer;
+  correctness: MetricEvaluation;
+  test_gap: MetricEvaluation;
+  security: MetricEvaluation;
+  blast_radius: MetricEvaluation;
   safe_to_merge: NoulAnswer;
   needs_human_review: NoulAnswer;
   has_security_concern: NoulAnswer;
@@ -44,6 +45,12 @@ export interface PolicyResult {
   reasons: string[];
 }
 
+export function isScored(
+  metric: MetricEvaluation
+): metric is Extract<MetricEvaluation, { applicable: true }> {
+  return metric.applicable;
+}
+
 export function noulCertainty(value: number): number {
   return Math.max(value, 1 - value);
 }
@@ -55,6 +62,7 @@ export function isUncertainNoul(value: number): boolean {
 /**
  * Compose Jev's independent answers into one merge decision.
  * Hard safety gates run before approve; low confidence escalates instead of guessing.
+ * Inapplicable scores are ignored — missing evidence is not a zero.
  */
 export function decide(answers: ReviewAnswers): PolicyResult {
   if (answers.has_security_concern.noul >= SECURITY_NOUL_THRESHOLD) {
@@ -67,7 +75,7 @@ export function decide(answers: ReviewAnswers): PolicyResult {
     };
   }
 
-  if (answers.correctness.score < LOW_CORRECTNESS_MAX) {
+  if (isScored(answers.correctness) && answers.correctness.score < LOW_CORRECTNESS_MAX) {
     return {
       decision: 'request_changes',
       rule: 'low_correctness',
@@ -77,12 +85,9 @@ export function decide(answers: ReviewAnswers): PolicyResult {
     };
   }
 
-  const minScoreConfidence = Math.min(
-    answers.correctness.confidence,
-    answers.test_gap.confidence,
-    answers.security.confidence,
-    answers.blast_radius.confidence
-  );
+  const scoreConfidences = scoredConfidences(answers);
+  const minScoreConfidence =
+    scoreConfidences.length === 0 ? 1 : Math.min(...scoreConfidences);
 
   if (
     answers.safe_to_merge.noul >= APPROVE_MERGE_THRESHOLD &&
@@ -94,7 +99,7 @@ export function decide(answers: ReviewAnswers): PolicyResult {
       rule: 'safe_to_merge',
       reasons: [
         `safe_to_merge=${formatProb(answers.safe_to_merge.noul)}`,
-        `min score confidence=${formatProb(minScoreConfidence)}`,
+        `min applicable score confidence=${formatProb(minScoreConfidence)}`,
         `needs_human_review=${formatProb(answers.needs_human_review.noul)}`,
       ],
     };
@@ -128,10 +133,16 @@ export function exitCodeFor(decision: Decision): number {
   }
 }
 
+function scoredConfidences(answers: ReviewAnswers): number[] {
+  return [answers.correctness, answers.test_gap, answers.security, answers.blast_radius]
+    .filter(isScored)
+    .map((metric) => metric.confidence);
+}
+
 function uncertainReasons(answers: ReviewAnswers): string[] {
   const reasons: string[] = [];
 
-  if (answers.correctness.confidence < LOW_SCORE_CONFIDENCE) {
+  if (isScored(answers.correctness) && answers.correctness.confidence < LOW_SCORE_CONFIDENCE) {
     reasons.push(
       `correctness confidence=${formatProb(answers.correctness.confidence)} (< ${LOW_SCORE_CONFIDENCE})`
     );
@@ -160,10 +171,10 @@ function commentReasons(answers: ReviewAnswers): string[] {
     `primary_risk=${answers.primary_risk.choice}`,
   ];
 
-  if (answers.test_gap.score < 3) {
+  if (isScored(answers.test_gap) && answers.test_gap.score < 3) {
     reasons.push(`test_gap=${formatScore(answers.test_gap.score)} (coverage gaps remain)`);
   }
-  if (answers.blast_radius.score >= 3) {
+  if (isScored(answers.blast_radius) && answers.blast_radius.score >= 3) {
     reasons.push(`blast_radius=${formatScore(answers.blast_radius.score)} (wide impact)`);
   }
 

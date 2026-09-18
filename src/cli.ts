@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { toReviewAnswers, usageFrom } from './answers.js';
 import { evaluateReview } from './client.js';
 import { formatCliError } from './errors.js';
-import { collectChange } from './git.js';
+import { collectChange, reviewTaskFromChange } from './git.js';
 import { writeReportFile } from './output.js';
 import { decide, exitCodeFor } from './policy.js';
 import { buildReport, renderJson, renderMarkdown } from './render.js';
@@ -14,13 +14,18 @@ const HELP = `jev-review — typed TypeSafe Jev decisions over a local git diff
 
 Usage:
   jev-review [--base <ref>] [--task <text>] [--output <file>]
+  jev-review --commit <rev|range> [--task <text>] [--output <file>]
   jev-review --diff <file.patch> [--task <text>] [--output <file>] [--json]
 
 Options:
   --base <ref>   Diff the working tree against this ref (default: HEAD, or the
                  working tree if this repo has no commits yet)
+  --commit <rev|range>
+                 Review a commit (HEAD, abc123) or range (main..HEAD, main...HEAD)
+                 without the working tree
   --diff <file>  Review a patch file instead of a git range
-  --task <text>  What the change is supposed to do
+  --task <text>  What the change is supposed to do. Local git reviews default to
+                 the commit message(s) in the reviewed range
   --config <path>
                  jev-review.config.json (default: ./jev-review.config.json)
   --output <file>
@@ -41,6 +46,7 @@ async function main(): Promise<number> {
   const { values } = parseArgs({
     options: {
       base: { type: 'string' },
+      commit: { type: 'string' },
       diff: { type: 'string' },
       task: { type: 'string' },
       config: { type: 'string' },
@@ -58,9 +64,11 @@ async function main(): Promise<number> {
 
   const change = collectChange({
     base: values.base,
+    commit: values.commit,
     diffFile: values.diff,
     configPath: values.config,
   });
+  const reviewTask = reviewTaskFromChange(change, values.task);
 
   if (change.skipped.length > 0) {
     process.stderr.write(
@@ -73,8 +81,13 @@ async function main(): Promise<number> {
     return 0;
   }
 
+  if (!values.task && reviewTask.task) {
+    process.stderr.write('Using git commit messages as the review task.\n');
+  }
+
   const state = buildReviewState({
-    task: values.task,
+    task: reviewTask.task,
+    commitMessages: reviewTask.commitMessages,
     source: change.source,
     files: change.files,
     omitted: change.skipped,
@@ -101,6 +114,7 @@ async function main(): Promise<number> {
     model: result.model,
     usage: usageFrom(result),
     task: state.task,
+    commitMessages: state.commitMessages,
     source: state.source,
     files: state.files,
     omitted: state.omitted,

@@ -38,18 +38,44 @@ export const SCORE_LEVELS = {
   ],
 } as const;
 
+function applicable(label: string, extra: string) {
+  return noul(
+    `Is ${label} relevant and assessable from the supplied state? Answer yes only when \`diff\` contains concrete evidence for this dimension. Do not invent concerns. ${extra}`,
+    {
+      true: `The supplied state supports a defensible ${label} assessment.`,
+      false: `${label} is irrelevant here, or the state is too thin to score.`,
+    }
+  );
+}
+
 export const reviewQuestions = {
+  correctness_applicable: applicable(
+    'correctness',
+    'Answer no for docs-only, lockfile, or empty changes with no implementation to judge against `task`.'
+  ),
   correctness: score(
     'How correct is the implementation in `diff` relative to `task`? Judge only what the supplied state supports.',
     SCORE_LEVELS.correctness
+  ),
+  test_gap_applicable: applicable(
+    'test coverage',
+    'Answer no when `diff` has no tests and no behavioral code whose coverage can be judged (docs, comments, config, chore).'
   ),
   test_gap: score(
     'How well do tests in the supplied state cover the behavior changed in `diff`? Judge coverage quality, not whether tests were requested.',
     SCORE_LEVELS.test_gap
   ),
+  security_applicable: applicable(
+    'security',
+    'Answer no when `diff` cannot introduce exposure (docs, comments, pure formatting). Answer yes for auth, input handling, secrets, network, or similar surfaces.'
+  ),
   security: score(
     'How secure is the change in `diff`? Higher means less new exposure. Do not invent issues that the state does not support.',
     SCORE_LEVELS.security
+  ),
+  blast_radius_applicable: applicable(
+    'blast radius',
+    'Answer no when the change is isolated docs or the state is too thin to judge coupling. Answer yes when `diff` shows structure that other code could depend on.'
   ),
   blast_radius: score(
     'How much else can the change in `diff` break? Higher means a larger blast radius.',
